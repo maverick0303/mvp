@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notificación de Inactividad</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #333333;
+            line-height: 1.5;
+        }
+        .contenedor {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        h2 {
+            color: #c0392b;
+        }
+        .alerta {
+            background-color: #f9e79f;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .footer {
+            font-size: 0.9em;
+            color: #777;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="contenedor">
+        <h2>Hola {{NOMBRE_USUARIO}},</h2>
+
+        <p>
+            Hemos detectado que tu cuenta presenta <b>{{DIAS_INACTIVO}} días</b> de inactividad.
+            Actualmente tu estado es: <strong>{{ESTADO}}</strong>.
+        </p>
+
+        <div class="alerta">
+            Para evitar la desactivación definitiva, te recomendamos realizar actividad antes del <b>{{FECHA_LIMITE}}</b>.
+        </div>
+
+        <p>
+            Si tienes dudas o necesitas reactivar tu acceso, por favor contacta a tu jefatura: <b>{{NOMBRE_JEFATURA}}</b>.
+        </p>
+
+        <p class="footer">
+            Este es un mensaje automático. No responda a este correo.
+        </p>
+    </div>
+</body>
+</html>
