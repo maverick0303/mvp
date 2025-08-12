@@ -83,3 +83,41 @@ with open("correo_jefatura.html", "w", encoding="utf-8") as f:
     f.write(html_jefatura)
 
 print("✅ Proceso completado. Archivos HTML creados.")
+# === Resúmenes por jefatura usando jefatura.xlsx (nombre + correo) ===
+# jefatura.xlsx tiene: id_jefatura, id_usuario, nombre (jefatura), correo (jefatura)
+jef = pd.read_excel("jefatura.xlsx")
+jef.columns = jef.columns.str.strip().str.lower()
+
+# Nos quedamos con un único registro por jefatura (nombre y correo)
+jef_unicas = (
+    jef.dropna(subset=["id_jefatura"])
+       .drop_duplicates(subset=["id_jefatura"])
+       .rename(columns={"nombre": "nombre_jefatura", "correo": "correo_jefatura"})
+       [["id_jefatura", "nombre_jefatura", "correo_jefatura"]]
+)
+
+# Unimos para que cada usuario candidato tenga el nombre/correo de su jefatura
+cand_jef = candidatos.merge(jef_unicas, on="id_jefatura", how="left")
+
+# Generamos UN HTML por cada jefatura (saludo con 'solo nombre')
+for id_jef, g in cand_jef.groupby("id_jefatura"):
+    nombre_jef = g["nombre_jefatura"].iloc[0] if pd.notna(g["nombre_jefatura"].iloc[0]) else f"Jefatura {id_jef}"
+
+    filas_html = "".join(
+        f"<tr><td>{r['id_usuario']}</td><td>{r['nombre']}</td>"
+        f"<td>{r['dias_inactivo']}</td><td>{r['estado']}</td></tr>"
+        for _, r in g.iterrows()
+    )
+
+    html_jef = tpl_jefatura.render(
+        NOMBRE_JEFATURA=nombre_jef,  # << aquí va SOLO el nombre (ej: 'Pablo', 'Martin')
+        N_ENVIADOS=len(g),
+        FILAS_TABLA=filas_html
+    )
+
+    # Un archivo por jefatura, ej: correo_jefatura_JEF-1.html
+    with open(f"correo_jefatura_{id_jef}.html", "w", encoding="utf-8") as f:
+        f.write(html_jef)
+
+print("✅ Resúmenes por jefatura generados (uno por cada id_jefatura).")
+# === Fin del script ===
