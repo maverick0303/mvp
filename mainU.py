@@ -1,23 +1,38 @@
+import os
 import pandas as pd
 from datetime import datetime, timedelta
 from jinja2 import Environment, FileSystemLoader
 
+# --- Limpiar pantalla al iniciar ---
+os.system('cls' if os.name == 'nt' else 'clear')
+
 # --- Configuración ---
-RUTA_EXCEL = "usuarios.xlsx"  # tu archivo Excel con id_usuario, id_jefatura, nombre, correo, ultimo_login
-RUTA_TEMPLATES = "templates"  # carpeta donde están los HTML
-UMBRAL_INACTIVO = 90          # días de inactividad para marcar como inactivo
-UMBRAL_DESACTIVADO = 120      # días de inactividad para marcar como desactivado
+RUTA_EXCEL = "usuarios.xlsx"       # tu archivo Excel
+RUTA_TEMPLATES = "notificacioes/templates"  # carpeta donde están los HTML
+UMBRAL_INACTIVO = 90               # días para marcar como inactivo
+UMBRAL_DESACTIVADO = 120           # días para marcar como desactivado
 
 # --- Leer Excel ---
+print("📂 Leyendo Excel...")
 df = pd.read_excel(RUTA_EXCEL)
 
-# Asegurar formato fecha
-df["ultimo_login"] = pd.to_datetime(df["ultimo_login"]).dt.date
+# --- Limpieza de datos ---
+print("🧹 Limpiando datos...")
+df.columns = df.columns.str.strip().str.lower()
+if "correo" in df.columns:
+    df["correo"] = df["correo"].astype(str).str.strip().str.lower()
+df = df.drop_duplicates(subset=["id_usuario"]).copy()
 
-# Calcular días inactivos y estado
-hoy = datetime.now().date()
+# --- Fechas y días inactivos ---
+print("📅 Convirtiendo fechas...")
+df["ultimo_login"] = pd.to_datetime(df["ultimo_login"], errors="coerce")
+
+print("⏳ Calculando días inactivos...")
+hoy = pd.Timestamp.today().normalize()
 df["dias_inactivo"] = (hoy - df["ultimo_login"]).dt.days
+df["dias_inactivo"] = df["dias_inactivo"].fillna(999).astype(int)
 
+# --- Estado ---
 def definir_estado(dias):
     if dias >= UMBRAL_DESACTIVADO:
         return "Desactivado"
@@ -28,30 +43,32 @@ def definir_estado(dias):
 
 df["estado"] = df["dias_inactivo"].apply(definir_estado)
 
-# Filtrar solo usuarios candidatos a notificación
+# --- Filtrar candidatos ---
+print("📋 Filtrando usuarios inactivos/desactivados...")
 candidatos = df[df["estado"].isin(["Inactivo", "Desactivado"])].copy()
 
 # --- Configurar Jinja2 ---
+print("✉️ Cargando plantillas...")
 env = Environment(loader=FileSystemLoader(RUTA_TEMPLATES))
 
-# Cargar plantillas
 tpl_usuario = env.get_template("correo_usuario.html")
 tpl_jefatura = env.get_template("correo_jefatura.html")
 
-# --- Generar correos individuales para usuarios ---
+# --- Generar correos de usuario ---
+print("📨 Generando correos para usuarios...")
 for _, row in candidatos.iterrows():
     html_usuario = tpl_usuario.render(
         NOMBRE_USUARIO=row["nombre"],
         DIAS_INACTIVO=row["dias_inactivo"],
         ESTADO=row["estado"],
         FECHA_LIMITE=(hoy + timedelta(days=14)).strftime("%d/%m/%Y"),
-        NOMBRE_JEFATURA="(Nombre de la Jefatura)"  # luego se puede leer de otra tabla o del Excel
+        NOMBRE_JEFATURA="(Nombre de la Jefatura)"  # luego se puede enlazar
     )
     with open(f"correo_usuario_{row['id_usuario']}.html", "w", encoding="utf-8") as f:
         f.write(html_usuario)
 
-# --- Generar un correo de resumen para jefatura ---
-# Para este MVP, generamos uno general, pero luego se puede separar por id_jefatura
+# --- Generar correo de resumen para jefatura ---
+print("📨 Generando correo de jefatura...")
 filas_html = ""
 for _, row in candidatos.iterrows():
     filas_html += f"<tr><td>{row['id_usuario']}</td><td>{row['nombre']}</td><td>{row['dias_inactivo']}</td><td>{row['estado']}</td></tr>"
@@ -65,4 +82,4 @@ html_jefatura = tpl_jefatura.render(
 with open("correo_jefatura.html", "w", encoding="utf-8") as f:
     f.write(html_jefatura)
 
-print("✅ Correos generados. Revisa los archivos HTML creados.")
+print("✅ Proceso completado. Archivos HTML creados.")
