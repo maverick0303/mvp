@@ -5,14 +5,16 @@ from datetime import datetime, timedelta
 from jinja2 import Environment, FileSystemLoader
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 import time
 
 # --- Configuración ---
 RUTA_EXCEL = "usuarios.xlsx"
 RUTA_JEFATURAS = "jefatura.xlsx"
 RUTA_TEMPLATES = "notificaciones/templates"
-RUTA_ENVIADOS = "correos_enviados.csv"  # ahora guarda correos, no IDs
+RUTA_ENVIADOS = "correos_enviados.csv"
 RUTA_JEFES_ENVIADOS = "jefes_enviados.csv"
+RUTA_BANNER = "banner.png"
 
 UMBRAL_INACTIVO = 90
 UMBRAL_DESACTIVADO = 120
@@ -88,14 +90,26 @@ for _, row in cand_jef.iterrows():
         DIAS_INACTIVO=row["dias_inactivo"],
         ESTADO=row["estado"],
         FECHA_LIMITE=(hoy + timedelta(days=14)).strftime("%d/%m/%Y"),
-        NOMBRE_JEFATURA=row["nombre_jefatura"]
+        NOMBRE_JEFATURA=row["nombre_jefatura"],
+        BANNER_CID="bannerimage"  # clave para la imagen en HTML
     )
 
-    msg = MIMEMultipart('alternative')
+    msg = MIMEMultipart('related')  # Cambiado a 'related' para soportar imágenes inline
     msg['From'] = REMITENTE
     msg['To'] = correo_destino
     msg['Subject'] = "Notificación de Inactividad"
-    msg.attach(MIMEText(html_usuario, 'html'))
+
+    msg_alternativo = MIMEMultipart('alternative')
+    msg_alternativo.attach(MIMEText(html_usuario, 'html'))
+    msg.attach(msg_alternativo)
+
+    # Adjuntar banner como imagen inline
+    if os.path.exists(RUTA_BANNER):
+        with open(RUTA_BANNER, 'rb') as f:
+            img = MIMEImage(f.read())
+            img.add_header('Content-ID', '<bannerimage>')
+            img.add_header('Content-Disposition', 'inline', filename="banner.png")
+            msg.attach(img)
 
     try:
         server.sendmail(REMITENTE, correo_destino, msg.as_string())
@@ -113,7 +127,7 @@ if correos_nuevos_enviados:
     else:
         df_nuevos.to_csv(RUTA_ENVIADOS, index=False)
 
-# --- Evitar reenviar resumen a jefaturas ---
+# --- Envío a jefaturas ---
 if os.path.exists(RUTA_JEFES_ENVIADOS):
     jefes_ya_enviados = pd.read_csv(RUTA_JEFES_ENVIADOS)["id_jefatura"].tolist()
 else:
@@ -138,14 +152,26 @@ for id_jef, g in cand_jef.groupby("id_jefatura"):
     html_jef = tpl_jefatura.render(
         NOMBRE_JEFATURA=nombre_jef,
         N_ENVIADOS=len(g),
-        FILAS_TABLA=filas_html
+        FILAS_TABLA=filas_html,
+        BANNER_CID="bannerimage"
     )
 
-    msg = MIMEMultipart('alternative')
+    msg = MIMEMultipart('related')
     msg['From'] = REMITENTE
     msg['To'] = correo_destino
     msg['Subject'] = "Resumen de Cuentas Inactivas"
-    msg.attach(MIMEText(html_jef, 'html'))
+
+    msg_alternativo = MIMEMultipart('alternative')
+    msg_alternativo.attach(MIMEText(html_jef, 'html'))
+    msg.attach(msg_alternativo)
+
+    # Adjuntar banner
+    if os.path.exists(RUTA_BANNER):
+        with open(RUTA_BANNER, 'rb') as f:
+            img = MIMEImage(f.read())
+            img.add_header('Content-ID', '<bannerimage>')
+            img.add_header('Content-Disposition', 'inline', filename="banner.png")
+            msg.attach(img)
 
     try:
         server.sendmail(REMITENTE, correo_destino, msg.as_string())
