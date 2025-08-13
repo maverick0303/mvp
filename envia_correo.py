@@ -56,14 +56,11 @@ jef_unicas = (
        .rename(columns={"nombre": "nombre_jefatura", "correo": "correo_jefatura"})
        [["id_jefatura", "nombre_jefatura", "correo_jefatura"]]
 )
-
 cand_jef = candidatos.merge(jef_unicas, on="id_jefatura", how="left")
 
-# --- Correos ya enviados (usuarios) ---
-if os.path.exists(RUTA_ENVIADOS):
-    enviados = pd.read_csv(RUTA_ENVIADOS)["correo"].tolist()
-else:
-    enviados = []
+# --- Correos ya enviados ---
+enviados = pd.read_csv(RUTA_ENVIADOS)["correo"].tolist() if os.path.exists(RUTA_ENVIADOS) else []
+jefes_ya_enviados = pd.read_csv(RUTA_JEFES_ENVIADOS)["id_jefatura"].tolist() if os.path.exists(RUTA_JEFES_ENVIADOS) else []
 
 # --- Plantillas Jinja2 ---
 env = Environment(loader=FileSystemLoader(RUTA_TEMPLATES))
@@ -80,7 +77,6 @@ correos_nuevos_enviados = []
 
 for _, row in cand_jef.iterrows():
     correo_destino = row["correo"]
-
     if correo_destino in enviados:
         print(f"⏭ Ya fue enviado a: {correo_destino}, se omite.")
         continue
@@ -91,10 +87,10 @@ for _, row in cand_jef.iterrows():
         ESTADO=row["estado"],
         FECHA_LIMITE=(hoy + timedelta(days=14)).strftime("%d/%m/%Y"),
         NOMBRE_JEFATURA=row["nombre_jefatura"],
-        BANNER_CID="bannerimage"  # clave para la imagen en HTML
+        BANNER_CID="bannerimage"
     )
 
-    msg = MIMEMultipart('related')  # Cambiado a 'related' para soportar imágenes inline
+    msg = MIMEMultipart('related')
     msg['From'] = REMITENTE
     msg['To'] = correo_destino
     msg['Subject'] = "Notificación de Inactividad"
@@ -103,7 +99,6 @@ for _, row in cand_jef.iterrows():
     msg_alternativo.attach(MIMEText(html_usuario, 'html'))
     msg.attach(msg_alternativo)
 
-    # Adjuntar banner como imagen inline
     if os.path.exists(RUTA_BANNER):
         with open(RUTA_BANNER, 'rb') as f:
             img = MIMEImage(f.read())
@@ -119,20 +114,11 @@ for _, row in cand_jef.iterrows():
         print(f"❌ Error enviando a {correo_destino}: {e}")
     time.sleep(PAUSA_SEGUNDOS)
 
-# --- Guardar usuarios enviados ---
 if correos_nuevos_enviados:
     df_nuevos = pd.DataFrame({"correo": correos_nuevos_enviados})
-    if os.path.exists(RUTA_ENVIADOS):
-        df_nuevos.to_csv(RUTA_ENVIADOS, mode="a", header=False, index=False)
-    else:
-        df_nuevos.to_csv(RUTA_ENVIADOS, index=False)
+    df_nuevos.to_csv(RUTA_ENVIADOS, mode="a" if os.path.exists(RUTA_ENVIADOS) else "w", header=not os.path.exists(RUTA_ENVIADOS), index=False)
 
 # --- Envío a jefaturas ---
-if os.path.exists(RUTA_JEFES_ENVIADOS):
-    jefes_ya_enviados = pd.read_csv(RUTA_JEFES_ENVIADOS)["id_jefatura"].tolist()
-else:
-    jefes_ya_enviados = []
-
 print("📨 Enviando correos a jefaturas...")
 jefes_enviados = []
 
@@ -165,7 +151,6 @@ for id_jef, g in cand_jef.groupby("id_jefatura"):
     msg_alternativo.attach(MIMEText(html_jef, 'html'))
     msg.attach(msg_alternativo)
 
-    # Adjuntar banner
     if os.path.exists(RUTA_BANNER):
         with open(RUTA_BANNER, 'rb') as f:
             img = MIMEImage(f.read())
@@ -184,10 +169,6 @@ for id_jef, g in cand_jef.groupby("id_jefatura"):
 server.quit()
 print("📤 Todos los correos enviados.")
 
-# --- Guardar jefaturas notificadas ---
 if jefes_enviados:
     df_nuevos = pd.DataFrame({"id_jefatura": jefes_enviados})
-    if os.path.exists(RUTA_JEFES_ENVIADOS):
-        df_nuevos.to_csv(RUTA_JEFES_ENVIADOS, mode="a", header=False, index=False)
-    else:
-        df_nuevos.to_csv(RUTA_JEFES_ENVIADOS, index=False)
+    df_nuevos.to_csv(RUTA_JEFES_ENVIADOS, mode="a" if os.path.exists(RUTA_JEFES_ENVIADOS) else "w", header=not os.path.exists(RUTA_JEFES_ENVIADOS), index=False)
