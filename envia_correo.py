@@ -60,7 +60,7 @@ cand_jef = candidatos.merge(jef_unicas, on="id_jefatura", how="left")
 
 # --- Correos ya enviados ---
 enviados = pd.read_csv(RUTA_ENVIADOS)["correo"].tolist() if os.path.exists(RUTA_ENVIADOS) else []
-jefes_ya_enviados = pd.read_csv(RUTA_JEFES_ENVIADOS)["id_jefatura"].tolist() if os.path.exists(RUTA_JEFES_ENVIADOS) else []
+jefes_ya_enviados = pd.read_csv(RUTA_JEFES_ENVIADOS)["correo"].tolist() if os.path.exists(RUTA_JEFES_ENVIADOS) else []
 
 # --- Plantillas Jinja2 ---
 env = Environment(loader=FileSystemLoader(RUTA_TEMPLATES))
@@ -114,21 +114,27 @@ for _, row in cand_jef.iterrows():
         print(f"❌ Error enviando a {correo_destino}: {e}")
     time.sleep(PAUSA_SEGUNDOS)
 
+# --- Guardar usuarios enviados ---
 if correos_nuevos_enviados:
     df_nuevos = pd.DataFrame({"correo": correos_nuevos_enviados})
-    df_nuevos.to_csv(RUTA_ENVIADOS, mode="a" if os.path.exists(RUTA_ENVIADOS) else "w", header=not os.path.exists(RUTA_ENVIADOS), index=False)
+    df_nuevos.to_csv(
+        RUTA_ENVIADOS,
+        mode="a" if os.path.exists(RUTA_ENVIADOS) else "w",
+        header=not os.path.exists(RUTA_ENVIADOS),
+        index=False
+    )
 
 # --- Envío a jefaturas ---
 print("📨 Enviando correos a jefaturas...")
 jefes_enviados = []
 
 for id_jef, g in cand_jef.groupby("id_jefatura"):
-    if id_jef in jefes_ya_enviados:
-        print(f"⏭ Ya se notificó a jefatura {id_jef}, se omite.")
+    correo_destino = g["correo_jefatura"].iloc[0]
+    if correo_destino in jefes_ya_enviados:
+        print(f"⏭ Ya se notificó a jefatura {correo_destino}, se omite.")
         continue
 
     nombre_jef = g["nombre_jefatura"].iloc[0] or f"Jefatura {id_jef}"
-    correo_destino = g["correo_jefatura"].iloc[0]
 
     filas_html = "".join(
         f"<tr><td>{r['id_usuario']}</td><td>{r['nombre']}</td><td>{r['dias_inactivo']}</td><td>{r['estado']}</td></tr>"
@@ -161,7 +167,7 @@ for id_jef, g in cand_jef.groupby("id_jefatura"):
     try:
         server.sendmail(REMITENTE, correo_destino, msg.as_string())
         print(f"✅ Resumen enviado a jefatura: {correo_destino}")
-        jefes_enviados.append(id_jef)
+        jefes_enviados.append(correo_destino)
     except Exception as e:
         print(f"❌ Error enviando a jefatura {correo_destino}: {e}")
     time.sleep(PAUSA_SEGUNDOS)
@@ -169,6 +175,12 @@ for id_jef, g in cand_jef.groupby("id_jefatura"):
 server.quit()
 print("📤 Todos los correos enviados.")
 
+# --- Guardar jefaturas notificadas ---
 if jefes_enviados:
-    df_nuevos = pd.DataFrame({"id_jefatura": jefes_enviados})
-    df_nuevos.to_csv(RUTA_JEFES_ENVIADOS, mode="a" if os.path.exists(RUTA_JEFES_ENVIADOS) else "w", header=not os.path.exists(RUTA_JEFES_ENVIADOS), index=False)
+    df_nuevos = pd.DataFrame({"correo": jefes_enviados})
+    df_nuevos.to_csv(
+        RUTA_JEFES_ENVIADOS,
+        mode="a" if os.path.exists(RUTA_JEFES_ENVIADOS) else "w",
+        header=not os.path.exists(RUTA_JEFES_ENVIADOS),
+        index=False
+    )
