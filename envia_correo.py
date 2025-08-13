@@ -12,8 +12,9 @@ import time
 RUTA_EXCEL = "usuarios.xlsx"
 RUTA_JEFATURAS = "jefatura.xlsx"
 RUTA_TEMPLATES = "notificaciones/templates"
-RUTA_ENVIADOS = "correos_enviados.csv"
-RUTA_JEFES_ENVIADOS = "jefes_enviados.csv"
+CARPETA_ALMACENAMIENTO = "Almacenamiento"
+RUTA_ENVIADOS = os.path.join(CARPETA_ALMACENAMIENTO, "correo_usuario.csv")
+RUTA_JEFES_ENVIADOS = os.path.join(CARPETA_ALMACENAMIENTO, "correo_jefatura.csv")
 RUTA_BANNER = "banner.png"
 
 UMBRAL_INACTIVO = 90
@@ -22,6 +23,9 @@ UMBRAL_DESACTIVADO = 120
 REMITENTE = "pruebasunisimple@gmail.com"
 CLAVE_APLICACION = "xvdn naan ivnn dhci"
 PAUSA_SEGUNDOS = 1
+
+# --- Crear carpeta almacenamiento si no existe ---
+os.makedirs(CARPETA_ALMACENAMIENTO, exist_ok=True)
 
 # --- Leer archivos ---
 df = pd.read_excel(RUTA_EXCEL)
