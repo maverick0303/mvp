@@ -7,13 +7,15 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import time
 
-# --- Limpiar pantalla al iniciar ---
+# --- Limpiar pantalla ---
 os.system('cls' if os.name == 'nt' else 'clear')
 
 # --- Configuración ---
 RUTA_EXCEL = "usuarios.xlsx"
 RUTA_JEFATURAS = "jefatura.xlsx"
 RUTA_TEMPLATES = "notificaciones/templates"
+RUTA_ENVIADOS = "enviados.csv"  # archivo de registro de usuarios ya notificados
+
 UMBRAL_INACTIVO = 90
 UMBRAL_DESACTIVADO = 120
 
@@ -58,8 +60,17 @@ df["estado"] = df["dias_inactivo"].apply(definir_estado)
 
 # --- Filtrar candidatos ---
 candidatos = df[df["estado"].isin(["Inactivo", "Desactivado"])].copy()
-# --- Merge con jefaturas para obtener nombre_jefatura ---
 cand_jef = candidatos.merge(jef_unicas, on="id_jefatura", how="left")
+
+# --- Cargar lista de usuarios ya enviados ---
+if os.path.exists(RUTA_ENVIADOS):
+    enviados = pd.read_csv(RUTA_ENVIADOS)
+    enviados_ids = enviados["id_usuario"].tolist()
+else:
+    enviados_ids = []
+
+# --- Filtrar usuarios que ya recibieron correo ---
+cand_jef = cand_jef[~cand_jef["id_usuario"].isin(enviados_ids)].copy()
 
 # --- Configurar Jinja2 ---
 env = Environment(loader=FileSystemLoader(RUTA_TEMPLATES))
@@ -73,13 +84,13 @@ server.login(REMITENTE, CLAVE_APLICACION)
 
 # --- Enviar correos a usuarios ---
 print("📨 Enviando correos a usuarios...")
-for _, row in cand_jef.iterrows():  # <-- Cambiado a cand_jef
+for _, row in cand_jef.iterrows():
     html_usuario = tpl_usuario.render(
         NOMBRE_USUARIO=row["nombre"],
         DIAS_INACTIVO=row["dias_inactivo"],
         ESTADO=row["estado"],
         FECHA_LIMITE=(hoy + timedelta(days=14)).strftime("%d/%m/%Y"),
-        NOMBRE_JEFATURA=row["nombre_jefatura"]  # <-- Ahora tomará correctamente
+        NOMBRE_JEFATURA=row["nombre_jefatura"]
     )
 
     msg = MIMEMultipart('alternative')
@@ -90,7 +101,17 @@ for _, row in cand_jef.iterrows():  # <-- Cambiado a cand_jef
 
     try:
         server.sendmail(REMITENTE, row["correo"], msg.as_string())
-        print(f"✅ Correo enviado a {row['correo']} con jefatura {row['nombre_jefatura']}")
+        print(f"✅ Se envió mensaje a {row['correo']} con jefatura {row['nombre_jefatura']}")
+
+        # --- Guardar usuario enviado ---
+        if os.path.exists(RUTA_ENVIADOS):
+            enviados = pd.read_csv(RUTA_ENVIADOS)
+        else:
+            enviados = pd.DataFrame(columns=["id_usuario"])
+        enviados_nuevos = pd.DataFrame([{"id_usuario": row["id_usuario"]}])
+        enviados = pd.concat([enviados, enviados_nuevos], ignore_index=True)
+        enviados.to_csv(RUTA_ENVIADOS, index=False)
+
     except Exception as e:
         print(f"❌ Error enviando a {row['correo']}: {e}")
     time.sleep(PAUSA_SEGUNDOS)
@@ -121,7 +142,7 @@ for id_jef, g in cand_jef.groupby("id_jefatura"):
 
     try:
         server.sendmail(REMITENTE, correo_destino, msg.as_string())
-        print(f"✅ Correo enviado a {correo_destino}")
+        print(f"✅ Se envió resumen a {correo_destino}")
     except Exception as e:
         print(f"❌ Error enviando a {correo_destino}: {e}")
     time.sleep(PAUSA_SEGUNDOS)
